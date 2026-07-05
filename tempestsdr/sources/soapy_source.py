@@ -23,6 +23,7 @@ class SoapySource(IQSource):
         antenna: str | None = None,
         block_size: int = 256 * 1024,
         channel: int = 0,
+        device_index: int = 0,
     ) -> None:
         try:
             import SoapySDR
@@ -37,16 +38,26 @@ class SoapySource(IQSource):
         self._SOAPY_SDR_RX = SOAPY_SDR_RX
         self._SOAPY_SDR_CF32 = SOAPY_SDR_CF32
 
-        try:
-            self._sdr = SoapySDR.Device({"driver": driver})
-        except Exception as exc:
-            found = [dict(d) for d in SoapySDR.Device.enumerate()]
-            drivers = sorted({d.get("driver", "?") for d in found})
+        # Enumerate first and open with the device's *full* args.  A bare
+        # {"driver": "..."} makes make() fail with "no match" on some SoapySDR
+        # builds even though enumerate() lists the device; the complete arg set
+        # (serial/label/etc.) matches reliably.
+        found = [dict(d) for d in SoapySDR.Device.enumerate()]
+        matches = [d for d in found if d.get("driver") == driver]
+        if not matches:
+            drivers = sorted({d.get("driver", "?") for d in found}) or ["none"]
             raise RuntimeError(
-                f"could not open SoapySDR driver {driver!r} ({exc}). "
-                f"Devices visible now: {drivers or 'none'}. "
-                "If the device is listed, it is probably busy — close any other "
-                "SDR app (SDR#, rtl_test, another probe) and retry."
+                f"no SoapySDR device with driver {driver!r} is present; "
+                f"visible drivers: {drivers}")
+        args = matches[min(int(device_index), len(matches) - 1)]
+        try:
+            self._sdr = SoapySDR.Device(args)
+        except Exception as exc:
+            raise RuntimeError(
+                f"found a {driver!r} device but could not open it ({exc}). "
+                "It is almost certainly busy or held by a crashed process: close "
+                "other SDR apps, kill stray python processes, unplug/replug the "
+                "dongle, then retry."
             ) from exc
         self._channel = int(channel)
         self._sdr.setSampleRate(SOAPY_SDR_RX, channel, float(samplerate))
