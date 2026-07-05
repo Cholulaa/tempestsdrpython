@@ -456,7 +456,7 @@ header .tag{color:var(--dim);font-size:12px}
 .wrap{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;padding:14px;align-items:start}
 @media(max-width:900px){.wrap{grid-template-columns:1fr}}
 .view{background:#000;border:1px solid var(--line);border-radius:8px;overflow:hidden;position:relative}
-.view img{width:100%;display:block;background:#000;min-height:200px}
+.view img{width:100%;display:block;background:#000;min-height:200px;aspect-ratio:16/9;object-fit:fill}
 .badges{position:absolute;top:8px;left:8px;display:flex;gap:6px;flex-wrap:wrap}
 .badge{background:rgba(13,17,23,.82);border:1px solid var(--line);border-radius:5px;
 padding:3px 8px;font-size:11px;color:var(--dim)}
@@ -508,6 +508,13 @@ canvas{width:100%;height:80px;display:block;background:var(--panel2);border-radi
         <div class="badge">FPS <b id="b-fps">–</b></div>
         <div class="badge lock" id="b-lock">unlocked</div>
         <div class="badge" id="b-src">–</div>
+        <select id="aspect" class="badge" style="cursor:pointer" title="display aspect ratio">
+          <option value="16/9">16:9</option>
+          <option value="16/10">16:10</option>
+          <option value="4/3">4:3</option>
+          <option value="5/4">5:4</option>
+          <option value="raw">raw px</option>
+        </select>
       </div>
     </div>
     <div class="card" style="margin-top:12px">
@@ -604,6 +611,11 @@ const $=id=>document.getElementById(id);
 let SR=1, modes=[];
 
 async function jpost(url,body){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});return r.json();}
+
+// display aspect ratio
+$('aspect').onchange=()=>{const v=$('aspect').value,im=$('live');
+  if(v==='raw'){im.style.aspectRatio='auto';im.style.objectFit='contain';}
+  else{im.style.aspectRatio=v;im.style.objectFit='fill';}};
 
 // source segmented control
 document.querySelectorAll('#src-seg button').forEach(b=>b.onclick=()=>{
