@@ -236,6 +236,20 @@ class Engine:
         with self.lock:
             self.processor.reconfigure(**clean)
 
+    def set_frequency(self, freq):
+        src = self._source
+        if src is not None and hasattr(src, "set_center_freq"):
+            src.set_center_freq(float(freq))
+            return True
+        return False
+
+    def set_gain(self, gain):
+        src = self._source
+        if src is not None and hasattr(src, "set_gain"):
+            src.set_gain(gain)
+            return True
+        return False
+
     def nudge(self, direction, pixels=1):
         w, h = self.processor.width, self.processor.config.height
         if direction == "up":

@@ -1,0 +1,17 @@
+[Unit]
+Description=TempestSDR control server (probe fleet dashboard)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tempestsdr
+# Set TEMPEST_API_KEY to require the same X-API-Key from every probe.
+Environment=TEMPEST_API_KEY=
+ExecStart=/usr/bin/env python3 -m tempestsdr.cli server --host 0.0.0.0 --port 9000 \
+          --archive /var/lib/tempestsdr/frames
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

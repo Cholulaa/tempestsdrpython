@@ -15,6 +15,7 @@ Run ``tempestsdr <command> -h`` for the options of each command.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 import numpy as np
@@ -180,6 +181,26 @@ def cmd_webgui(args) -> int:  # pragma: no cover - long-running server
     return 0
 
 
+def cmd_server(args) -> int:  # pragma: no cover - long-running server
+    from .server import run
+    run(host=args.host, port=args.port, api_key=args.api_key, archive_dir=args.archive)
+    return 0
+
+
+def cmd_agent(args) -> int:  # pragma: no cover - long-running probe
+    from .agent import Agent
+    agent = Agent(args.server, args.device_id, api_key=args.api_key,
+                  send_interval=args.interval, jpeg_quality=args.quality)
+    if args.synthetic:
+        agent.use_synthetic()
+    else:
+        driver = "rtlsdr-native" if args.driver == "rtlsdr-native" else args.driver
+        agent.use_sdr(driver, args.samplerate, args.frequency, gain=args.gain,
+                      height=args.height, refresh=args.refresh)
+    agent.run()
+    return 0
+
+
 def cmd_live(args) -> int:  # pragma: no cover - requires hardware
     if args.driver == "rtlsdr-native":
         from .sources.rtlsdr_source import RtlSdrSource
@@ -286,6 +307,29 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8000)
     p.set_defaults(func=cmd_webgui)
+
+    p = sub.add_parser("server", help="remote control server for a probe fleet")
+    p.add_argument("--host", default="0.0.0.0")
+    p.add_argument("--port", type=int, default=9000)
+    p.add_argument("--api-key", default=os.environ.get("TEMPEST_API_KEY") or None,
+                   help="shared X-API-Key for probes (or TEMPEST_API_KEY env)")
+    p.add_argument("--archive", default=None, help="directory to archive received frames")
+    p.set_defaults(func=cmd_server)
+
+    p = sub.add_parser("agent", help="autonomous edge probe reporting to a server")
+    p.add_argument("--server", required=True, help="control server base URL")
+    p.add_argument("--device-id", required=True)
+    p.add_argument("--api-key", default=os.environ.get("TEMPEST_API_KEY") or None)
+    p.add_argument("--interval", type=float, default=2.0, help="report interval (s)")
+    p.add_argument("--quality", type=int, default=75, help="JPEG quality")
+    p.add_argument("--synthetic", action="store_true", help="use the built-in synthetic source (no SDR)")
+    p.add_argument("--driver", default="rtlsdr", help="SoapySDR driver or 'rtlsdr-native'")
+    p.add_argument("--samplerate", type=float, default=2_400_000)
+    p.add_argument("--frequency", type=float, default=400_000_000)
+    p.add_argument("--gain", default="auto")
+    p.add_argument("--height", type=int, default=None, help="total lines (else auto-detect)")
+    p.add_argument("--refresh", type=float, default=None, help="refresh rate Hz")
+    p.set_defaults(func=cmd_agent)
 
     return parser
 

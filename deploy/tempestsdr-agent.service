@@ -1,0 +1,18 @@
+[Unit]
+Description=TempestSDR edge probe (autonomous reconstruction + uplink)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Adjust User and paths to your install.
+User=pi
+EnvironmentFile=/etc/tempestsdr/agent.env
+ExecStart=/opt/tempestsdr/deploy/run-agent.sh /etc/tempestsdr/agent.env
+Restart=always
+RestartSec=5
+# The probe keeps running through outages; systemd restarts it if it ever dies.
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target

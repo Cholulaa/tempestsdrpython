@@ -86,6 +86,8 @@ tempestsdr detect  CAP.iq        ...     # estimate refresh rate / line count (b
 tempestsdr reconstruct CAP.iq OUT.png .. # reconstruct image(s) from a raw capture
 tempestsdr demo    IMG  OUT.png  ...     # synth + reconstruct in one step
 tempestsdr webgui                        # full browser control panel
+tempestsdr server  ...                   # fleet control server + dashboard
+tempestsdr agent   ...                   # autonomous edge probe (reports to a server)
 tempestsdr live    ...                   # real-time from RTL-SDR / SoapySDR
 ```
 
@@ -127,6 +129,32 @@ It streams the recovered image live (MJPEG) and provides:
   frame-rate PLL, nearest-neighbour resampling, low-pass-before-sync,
   auto-gain placement — plus manual sync nudges and a PNG snapshot button;
 - live **SNR, FPS, lock-state and geometry** read-outs.
+
+## Autonomous probe fleet
+
+For unattended operation, run edge **probes** (e.g. a Raspberry Pi + RTL-SDR)
+that reconstruct locally and stream the recovered frames to a central **control
+server** with a fleet dashboard. Each probe checks in over plain HTTP + JSON
+(standard-library uplink, so the probe stays dependency-light), tolerates
+network outages with backoff, and applies commands the server hands back
+(retune, change resolution, blind auto-detect, switch source).
+
+![control-server dashboard](docs/server_dashboard.png)
+
+Try it end to end with **no hardware**:
+
+```bash
+pip install flask pillow
+tempestsdr server --port 9000                                    # dashboard at :9000
+tempestsdr agent --server http://127.0.0.1:9000 --device-id test-01 --synthetic
+```
+
+On a Raspberry Pi the probe runs as a `systemd` service and streams live to your
+server. Full setup — install, RTL-SDR bandwidth notes, `systemd` units, runtime
+commands and security guidance — is in [`deploy/`](deploy/README.md).
+
+> Deploy probes only against equipment you own or are explicitly authorised to
+> test.
 
 ## Library usage
 

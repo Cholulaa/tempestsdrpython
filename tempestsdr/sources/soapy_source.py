@@ -52,6 +52,14 @@ class SoapySource(IQSource):
         self._running = False
         self._stream = None
 
+    def set_center_freq(self, freq: float) -> None:
+        self.center_freq = float(freq)
+        self._sdr.setFrequency(self._SOAPY_SDR_RX, self._channel, float(freq))
+
+    def set_gain(self, gain) -> None:
+        if gain not in ("auto", None):
+            self._sdr.setGain(self._SOAPY_SDR_RX, self._channel, float(gain))
+
     def __iter__(self):
         self._stream = self._sdr.setupStream(
             self._SOAPY_SDR_RX, self._SOAPY_SDR_CF32, [self._channel]
