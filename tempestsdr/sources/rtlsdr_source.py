@@ -29,6 +29,14 @@ class RtlSdrSource(IQSource):
                 "'pip install pyrtlsdr' and make sure the librtlsdr driver is "
                 "present."
             ) from exc
+        except AttributeError as exc:  # pragma: no cover - env dependent
+            # e.g. "function 'rtlsdr_set_dithering' not found": pyrtlsdr is newer
+            # than the installed librtlsdr.dll.
+            raise RuntimeError(
+                f"pyrtlsdr could not bind to your librtlsdr ({exc}). The DLL is "
+                "older than pyrtlsdr expects. Either downgrade pyrtlsdr "
+                "(pip install 'pyrtlsdr<0.3') or supply a newer rtlsdr.dll."
+            ) from exc
 
         self._sdr = RtlSdr(device_index=device_index)
         self._sdr.sample_rate = float(samplerate)
