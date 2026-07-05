@@ -37,7 +37,17 @@ class SoapySource(IQSource):
         self._SOAPY_SDR_RX = SOAPY_SDR_RX
         self._SOAPY_SDR_CF32 = SOAPY_SDR_CF32
 
-        self._sdr = SoapySDR.Device({"driver": driver})
+        try:
+            self._sdr = SoapySDR.Device({"driver": driver})
+        except Exception as exc:
+            found = [dict(d) for d in SoapySDR.Device.enumerate()]
+            drivers = sorted({d.get("driver", "?") for d in found})
+            raise RuntimeError(
+                f"could not open SoapySDR driver {driver!r} ({exc}). "
+                f"Devices visible now: {drivers or 'none'}. "
+                "If the device is listed, it is probably busy — close any other "
+                "SDR app (SDR#, rtl_test, another probe) and retry."
+            ) from exc
         self._channel = int(channel)
         self._sdr.setSampleRate(SOAPY_SDR_RX, channel, float(samplerate))
         self._sdr.setFrequency(SOAPY_SDR_RX, channel, float(center_freq))
@@ -80,8 +90,13 @@ class SoapySource(IQSource):
         self._running = False
 
     def close(self) -> None:  # pragma: no cover - hardware dependent
+        self._running = False
         try:
             if self._stream is not None:
                 self._sdr.closeStream(self._stream)
+                self._stream = None
         except Exception:
             pass
+        # Drop the device reference so the underlying USB handle is released
+        # (lets the next start_source open it again).
+        self._sdr = None

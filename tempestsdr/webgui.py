@@ -92,6 +92,7 @@ class Engine:
         self._source = None
         self.source_kind = "synthetic"
         self.true_geometry = None  # ground-truth mode of the synthetic source
+        self.frequency = None      # last tuned SDR centre frequency
         self._frame_times = deque(maxlen=30)
         self._latest_jpeg = _encode_jpeg(np.zeros((10, 10)))
         self._manual_dx = 0
@@ -118,6 +119,7 @@ class Engine:
         return generate(img, scfg)
 
     def start_synthetic(self):
+        self.stop()  # release any previous device before opening a new source
         iq = self._build_synthetic_iq()
         self.true_geometry = {
             "height": _DEMO_TOTAL_H, "refresh_rate": _DEMO_REFRESH,
@@ -130,6 +132,7 @@ class Engine:
         self._start_source("synthetic", LoopArraySource(iq, _DEMO_SAMPLERATE))
 
     def start_file(self, path, samplerate, sample_format="uint8"):
+        self.stop()
         from .sources.file_source import FileSource
         src = FileSource(path, samplerate=samplerate, sample_format=sample_format, loop=True)
         with self.lock:
@@ -138,6 +141,14 @@ class Engine:
         self._start_source("file", src)
 
     def start_sdr(self, driver, samplerate, frequency, gain="auto"):
+        # An RTL-SDR streams ~2.4 Msps reliably; guard against unsupported rates
+        # that would otherwise surface as confusing device errors.
+        samplerate = float(samplerate)
+        if "rtlsdr" in driver and samplerate > 2_800_000:
+            raise ValueError(
+                f"{samplerate/1e6:.1f} Msps is too high for an RTL-SDR "
+                "(use 2400000 or less)")
+        self.stop()  # free the device BEFORE opening it again, else make() fails
         if driver == "rtlsdr-native":
             from .sources.rtlsdr_source import RtlSdrSource
             src = RtlSdrSource(samplerate, frequency, gain=gain)
@@ -146,12 +157,12 @@ class Engine:
             src = SoapySource(samplerate, frequency, driver=driver,
                               gain=None if gain in ("auto", None) else float(gain))
         with self.lock:
-            self.processor.reconfigure(samplerate=float(samplerate))
+            self.processor.reconfigure(samplerate=samplerate)
+        self.frequency = frequency
         self.true_geometry = None
         self._start_source("sdr", src)
 
     def _start_source(self, kind, source):
-        self.stop()
         with self.lock:
             self._generation += 1
             gen = self._generation
@@ -162,13 +173,22 @@ class Engine:
         self._thread.start()
 
     def stop(self):
-        src = self._source
+        """Stop the worker and fully release the current source/device."""
+        self._generation += 1          # invalidate the running worker
+        src, self._source = self._source, None
         if src is not None and hasattr(src, "stop"):
             try:
                 src.stop()
             except Exception:
                 pass
-        self._source = None
+        t, self._thread = self._thread, None
+        if t is not None and t.is_alive() and t is not threading.current_thread():
+            t.join(timeout=3.0)
+        if src is not None and hasattr(src, "close"):
+            try:
+                src.close()
+            except Exception:
+                pass
 
     # -- worker ------------------------------------------------------------
     def _worker(self, source, gen):
@@ -395,6 +415,11 @@ def create_app(engine: "Engine"):
             else:
                 return jsonify({"error": f"unknown source kind {kind!r}"}), 400
         except Exception as exc:
+            # Recover to the synthetic source so the panel is never left blank.
+            try:
+                engine.start_synthetic()
+            except Exception:
+                pass
             return jsonify({"error": str(exc)}), 400
         return jsonify(engine.status())
 
@@ -522,9 +547,10 @@ canvas{width:100%;height:80px;display:block;background:var(--panel2);border-radi
               <option value="rtlsdr-native">pyrtlsdr (native)</option>
               <option value="hackrf">SoapySDR: hackrf</option>
               <option value="uhd">SoapySDR: uhd</option></select></label>
-          <label><span class="k">sample rate</span><input id="s-sr" type="number" value="8000000"></label>
+          <label><span class="k">sample rate</span><input id="s-sr" type="number" value="2400000"></label>
           <label><span class="k">frequency</span><input id="s-fq" type="number" value="400000000"></label>
           <label><span class="k">gain</span><input id="s-gn" type="text" value="auto"></label>
+          <div class="hint">RTL-SDR: keep sample rate ≤ 2 400 000. Close other SDR apps first.</div>
         </div>
         <button class="primary" id="src-apply">Start source</button>
         <div class="err" id="src-err"></div>
