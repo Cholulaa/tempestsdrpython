@@ -33,18 +33,25 @@ class RtlSdrSource(IQSource):
         self._sdr = RtlSdr(device_index=device_index)
         self._sdr.sample_rate = float(samplerate)
         self._sdr.center_freq = float(center_freq)
-        self._sdr.gain = gain
+        self._apply_gain(gain)
         self.samplerate = float(samplerate)
         self.center_freq = float(center_freq)
         self.block_size = int(block_size)
         self._running = False
+
+    def _apply_gain(self, gain) -> None:
+        # pyrtlsdr's gain setter wants a number; "auto" means enable tuner AGC.
+        if gain in ("auto", None, ""):
+            self._sdr.set_manual_gain_enabled(False)
+        else:
+            self._sdr.gain = float(gain)
 
     def set_center_freq(self, freq: float) -> None:
         self.center_freq = float(freq)
         self._sdr.center_freq = float(freq)
 
     def set_gain(self, gain: float | str) -> None:
-        self._sdr.gain = gain
+        self._apply_gain(gain)
 
     def __iter__(self):
         self._running = True
