@@ -38,6 +38,7 @@ class ProcessorConfig:
     autogain_after: bool = False
     norm_coeff: float = 0.1          # NORMALISATION_LOWPASS_COEFF in the C code
     detect_framerate: bool = False
+    framerate_pll: bool = False      # track horizontal drift by nudging the pixel rate
 
 
 @dataclass
@@ -90,6 +91,39 @@ class TempestProcessor:
         if self.frame_detector is not None:
             self.frame_detector.reset()
 
+    _GEOMETRY_FIELDS = ("samplerate", "height", "refresh_rate")
+
+    def reconfigure(self, **changes) -> None:
+        """Apply configuration changes live (used by interactive front-ends).
+
+        Changing the geometry (sample rate, height, refresh rate) recomputes the
+        pixel geometry and resets the running state; changing the resampling mode
+        rebuilds the resampler; the remaining knobs (motion blur, autoshift,
+        auto-gain placement, ...) take effect on the next frame with no reset.
+        """
+        geometry_dirty = False
+        nearest_changed = False
+        for key, value in changes.items():
+            if not hasattr(self.config, key):
+                raise AttributeError(f"unknown config field {key!r}")
+            if getattr(self.config, key) == value:
+                continue
+            if key in self._GEOMETRY_FIELDS:
+                geometry_dirty = True
+            if key == "nearest":
+                nearest_changed = True
+            if key == "detect_framerate" and value and self.frame_detector is None:
+                self.frame_detector = FrameRateDetector(self.config.samplerate)
+            setattr(self.config, key, value)
+
+        if nearest_changed:
+            self._resampler = dsp.Resampler(nearest=self.config.nearest)
+        if geometry_dirty:
+            self._recompute_geometry()
+            if self.frame_detector is not None:
+                self.frame_detector = FrameRateDetector(self.config.samplerate)
+            self.reset()
+
     def _post_process(self, frame: np.ndarray) -> np.ndarray:
         """One frame through autogain -> sync -> frame-average (dsp.c order)."""
         cfg = self.config
@@ -113,7 +147,25 @@ class TempestProcessor:
 
         if cfg.autogain_after:
             result = self._autogain.run(result, cfg.norm_coeff)
+
+        if cfg.framerate_pll:
+            self._apply_pll()
         return np.clip(result, 0.0, 1.0).astype(np.float32)
+
+    def _apply_pll(self) -> None:
+        """Nudge the pixel rate to track horizontal drift (C: frameratepll).
+
+        The sync detector reports how fast the blanking is sliding; we correct
+        by adjusting the refresh rate and hence the resampling ratio.  The frame
+        *width* is deliberately held constant so the pixel buffer stays valid —
+        only the horizontal timing (``pixels_per_sample``) is retuned.
+        """
+        delta = self._sync.pll_frequency_correction()
+        if delta == 0.0:
+            return
+        self.config.refresh_rate -= delta
+        self.pixel_rate = self.width * self.config.height * self.config.refresh_rate
+        self.pixels_per_sample = self.pixel_rate / self.config.samplerate
 
     def process(self, iq: np.ndarray) -> list[np.ndarray]:
         """Feed a block of complex samples, return any completed frames."""

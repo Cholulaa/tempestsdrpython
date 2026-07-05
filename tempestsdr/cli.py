@@ -174,6 +174,12 @@ def cmd_demo(args) -> int:
     return 0
 
 
+def cmd_webgui(args) -> int:  # pragma: no cover - long-running server
+    from .webgui import run
+    run(host=args.host, port=args.port)
+    return 0
+
+
 def cmd_live(args) -> int:  # pragma: no cover - requires hardware
     if args.driver == "rtlsdr-native":
         from .sources.rtlsdr_source import RtlSdrSource
@@ -275,6 +281,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--frequency", type=float, required=True)
     p.add_argument("--gain", default="auto")
     p.set_defaults(func=cmd_live)
+
+    p = sub.add_parser("webgui", help="full browser control panel (Flask)")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8000)
+    p.set_defaults(func=cmd_webgui)
 
     return parser
 

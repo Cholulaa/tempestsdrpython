@@ -85,6 +85,7 @@ tempestsdr synth   IMG  OUT.iq   ...     # forward-model a capture from an image
 tempestsdr detect  CAP.iq        ...     # estimate refresh rate / line count (blind)
 tempestsdr reconstruct CAP.iq OUT.png .. # reconstruct image(s) from a raw capture
 tempestsdr demo    IMG  OUT.png  ...     # synth + reconstruct in one step
+tempestsdr webgui                        # full browser control panel
 tempestsdr live    ...                   # real-time from RTL-SDR / SoapySDR
 ```
 
@@ -101,6 +102,31 @@ tempestsdr detect capture.iq --samplerate 19895040 --format uint8
 # estimated lines  : 628.0
 # closest preset   : 800x600 @ 60Hz
 ```
+
+## Web control panel
+
+A full browser-based control panel — richer than the original Java GUI — runs
+the reconstruction live and exposes every knob:
+
+```bash
+pip install flask pillow
+tempestsdr webgui            # then open http://127.0.0.1:8000
+```
+
+![web control panel](docs/webgui.png)
+
+It streams the recovered image live (MJPEG) and provides:
+
+- **three sources** — a built-in synthetic emanation (works with no hardware),
+  an uploaded raw-IQ capture, or a live RTL-SDR / SoapySDR front-end;
+- **blind auto-detect** — one click estimates the refresh rate and line count
+  from the signal and applies the matching geometry;
+- a **clickable frame-rate autocorrelation plot** — click a peak to lock the
+  refresh rate by eye;
+- every processing knob live — motion-blur (frame averaging), auto-shift,
+  frame-rate PLL, nearest-neighbour resampling, low-pass-before-sync,
+  auto-gain placement — plus manual sync nudges and a PNG snapshot button;
+- live **SNR, FPS, lock-state and geometry** read-outs.
 
 ## Library usage
 
@@ -167,6 +193,7 @@ The signal path (`tempestsdr/processor.py`) mirrors the original C library:
 | `TSDRLibrary.c` (thread pipeline) | orchestration | `processor.py` |
 | `TSDRPlugin_RawFile`, UHD/RTL/... | IQ sources | `sources/` |
 | `VideoMode.java` | VESA presets | `videomodes.py` |
+| `JavaGUI` (Swing control panel) | interactive front-end | `webgui.py` (browser), `gui.py` (matplotlib) |
 | (new) | hardware-free testing | `synth.py` |
 
 ## Testing

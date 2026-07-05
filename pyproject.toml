@@ -26,6 +26,7 @@ dependencies = [
 [project.optional-dependencies]
 image = ["pillow>=8.0"]
 gui = ["matplotlib>=3.4"]
+webgui = ["flask>=2.0", "pillow>=8.0"]
 rtlsdr = ["pyrtlsdr>=0.2.9"]
 dev = ["pytest>=7.0", "pillow>=8.0"]
 
