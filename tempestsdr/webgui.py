@@ -542,11 +542,11 @@ canvas{width:100%;height:80px;display:block;background:var(--panel2);border-radi
         </div>
         <div id="src-sdr" style="display:none;flex-direction:column;gap:7px">
           <label><span class="k">driver</span>
-            <select id="s-drv" style="width:150px">
-              <option value="rtlsdr">SoapySDR: rtlsdr</option>
-              <option value="rtlsdr-native">pyrtlsdr (native)</option>
-              <option value="hackrf">SoapySDR: hackrf</option>
-              <option value="uhd">SoapySDR: uhd</option></select></label>
+            <select id="s-drv" style="width:170px">
+              <option value="rtlsdr-native">RTL-SDR (pyrtlsdr — recommended)</option>
+              <option value="rtlsdr">RTL-SDR (SoapySDR)</option>
+              <option value="hackrf">HackRF (SoapySDR)</option>
+              <option value="uhd">USRP / UHD (SoapySDR)</option></select></label>
           <label><span class="k">sample rate</span><input id="s-sr" type="number" value="2400000"></label>
           <label><span class="k">frequency</span><input id="s-fq" type="number" value="400000000"></label>
           <label><span class="k">gain</span><input id="s-gn" type="text" value="auto"></label>
