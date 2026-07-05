@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+*.iq
+# demo.py writes its output into the current working directory; ignore those,
+# but keep the committed copies under docs/.
+/demo_original.png
+/demo_reconstructed.png
+/examples/demo_original.png
+/examples/demo_reconstructed.png

@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tempestsdr"
+version = "1.0.0"
+description = "Reconstruct video-display content from electromagnetic emanations captured with an SDR (Python port of TempestSDR)."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "GPL-3.0-or-later" }
+authors = [{ name = "Python port contributors" }]
+keywords = ["sdr", "tempest", "van-eck", "side-channel", "security-research", "dsp"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Topic :: Security",
+    "Topic :: Scientific/Engineering",
+    "Intended Audience :: Science/Research",
+]
+dependencies = [
+    "numpy>=1.21",
+    "scipy>=1.7",
+]
+
+[project.optional-dependencies]
+image = ["pillow>=8.0"]
+gui = ["matplotlib>=3.4"]
+rtlsdr = ["pyrtlsdr>=0.2.9"]
+dev = ["pytest>=7.0", "pillow>=8.0"]
+
+[project.scripts]
+tempestsdr = "tempestsdr.cli:main"
+
+[project.urls]
+"Original project" = "https://github.com/martinmarinov/TempestSDR"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["tempestsdr*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
