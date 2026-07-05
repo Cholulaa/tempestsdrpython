@@ -53,6 +53,25 @@ def test_detector_recovers_refresh_and_height():
     assert est["height_lines"] == pytest.approx(total_h, abs=15)
 
 
+def test_peak_confidence_separates_signal_from_noise():
+    rng = np.random.default_rng(6)
+    tw, th, rf, sr = 1056, 628, 60.0, 2_400_000
+    iq = generate(np.random.default_rng(0).random((200, 260)), SyntheticConfig(
+        total_width=tw, total_height=th, refresh_rate=rf, samplerate=sr,
+        num_frames=40, snr_db=6, mode="edge", seed=1))
+
+    det_sig = FrameRateDetector(sr)
+    det_sig.run(dsp.am_demodulate(iq))
+
+    noise = (rng.standard_normal(iq.size) + 1j * rng.standard_normal(iq.size)).astype(np.complex64)
+    det_noise = FrameRateDetector(sr)
+    det_noise.run(dsp.am_demodulate(noise))
+
+    assert det_noise.peak_confidence() < 1.5      # flat band -> ~1
+    assert det_sig.peak_confidence() > 5.0        # strong frame periodicity
+    assert det_sig.peak_confidence() > 3 * det_noise.peak_confidence()
+
+
 def test_detector_is_block_size_invariant():
     # Detection must not depend on how the stream is chopped into run() calls.
     rng = np.random.default_rng(4)

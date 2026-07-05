@@ -71,9 +71,23 @@ An RTL-SDR reliably streams **~2.4 Msps**. The reconstructable horizontal pixel
 clock scales with the sample rate, so RTL-SDR probes suit **lower-resolution /
 lower-refresh** targets and produce coarse (but often readable) images. For
 higher resolutions use a wider front-end (HackRF, USRP, Airspy) via the
-SoapySDR driver — set `DRIVER=` accordingly in `agent.env`. Tune `FREQUENCY`
-near a harmonic of the target's pixel clock; use `tempestsdr detect` on a short
-capture, or the dashboard's **Auto-detect**, to find the video mode.
+SoapySDR driver — set `DRIVER=` accordingly in `agent.env`.
+
+### Finding the frequency
+
+The hardest part is finding where the target leaks. Tune near a harmonic of the
+pixel clock and look for a strong, plausible frame rate. `tempestsdr detect`
+reports a **confidence** (frame-rate autocorrelation peak prominence): `~1` means
+noise, well above `~2` means a real periodic video signal.
+
+`scripts/scan.ps1` (Windows) automates the sweep — it records a short capture at
+each frequency and ranks them by confidence:
+
+```powershell
+.\scripts\scan.ps1 -Start 250e6 -Stop 600e6 -Step 25e6
+```
+
+Then reconstruct at the best candidate frequency with the suggested preset.
 
 ## Runtime control
 

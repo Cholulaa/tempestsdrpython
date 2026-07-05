@@ -96,6 +96,23 @@ def cmd_detect(args) -> int:
     for block in src:
         detector.run(dsp.am_demodulate(block))
     est = detector.estimate_resolution()
+    confidence = detector.peak_confidence()
+
+    if getattr(args, "json", False):
+        import json
+        out = {"ok": est is not None, "confidence": round(confidence, 3)}
+        if est:
+            closest = videomodes.find_closest(est["refresh_rate"], round(est["height_lines"]))
+            out.update({
+                "refresh_rate": round(est["refresh_rate"], 3),
+                "height_lines": round(est["height_lines"], 1),
+                "frame_period_samples": est["frame_period_samples"],
+                "line_period_samples": est["line_period_samples"],
+                "closest_preset": closest.name if closest else None,
+            })
+        print(json.dumps(out))
+        return 0 if est else 1
+
     if est is None:
         print("could not estimate a frame rate (not enough data?)")
         return 1
@@ -103,6 +120,7 @@ def cmd_detect(args) -> int:
     print(f"frame period     : {est['frame_period_samples']:.1f} samples")
     print(f"line period      : {est['line_period_samples']:.2f} samples")
     print(f"estimated lines  : {est['height_lines']:.1f}")
+    print(f"confidence       : {confidence:.2f}  (>~2 suggests a real signal)")
     closest = videomodes.find_closest(est["refresh_rate"], round(est["height_lines"]))
     if closest:
         print(f"closest preset   : {closest.name}")
@@ -265,6 +283,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--format", default="uint8",
                    choices=["float", "int8", "uint8", "int16", "uint16"])
     p.add_argument("--max-samples", type=int, default=4_000_000)
+    p.add_argument("--json", action="store_true", help="machine-readable output (for scanning)")
     p.set_defaults(func=cmd_detect)
 
     p = sub.add_parser("reconstruct", help="reconstruct image(s) from a capture")

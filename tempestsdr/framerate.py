@@ -178,6 +178,23 @@ class FrameRateDetector:
             return None
         return LineEstimate(line_period_samples=float(lag), correlation=corr)
 
+    def peak_confidence(self) -> float:
+        """Prominence of the frame-rate peak: band max / band median.
+
+        ~1 for noise (a flat autocorrelation band), rising well above 1 when a
+        genuine frame periodicity is present.  Used to rank candidate tuning
+        frequencies during a scan.
+        """
+        self._ensure_analysed()
+        corr = self.correlation
+        lo = max(1, int(self.samplerate / self.max_framerate))
+        hi = min(int(self.samplerate / self.min_framerate), corr.size - 1)
+        if corr.size == 0 or hi <= lo:
+            return 0.0
+        band = corr[lo:hi]
+        med = float(np.median(band))
+        return float(band.max() / med) if med > 0 else 0.0
+
     def estimate_resolution(self) -> dict | None:
         """Combine frame and line peaks into (refresh rate, total line count)."""
         frame = self.estimate_framerate()
