@@ -4,7 +4,7 @@ A browser-based front-end that goes beyond the original Java GUI: it runs the
 reconstruction pipeline in a background worker and streams the recovered image
 live (MJPEG), while exposing every processor knob, a blind auto-detect button, a
 clickable frame-rate autocorrelation plot, manual sync nudges, and three source
-types — a built-in synthetic emanation (so it works with no hardware), an
+types: a built-in synthetic emanation (so it works with no hardware), an
 uploaded raw-IQ capture, or a live SDR.
 
 Launch with ``tempestsdr webgui`` and open http://127.0.0.1:8000.
@@ -24,6 +24,7 @@ import numpy as np
 
 from . import videomodes
 from .dsp import am_demodulate
+from .framerate import FrameRateDetector
 from .processor import ProcessorConfig, TempestProcessor
 
 # Geometry of the built-in synthetic target (a real VESA-ish mode, kept modest
@@ -99,6 +100,8 @@ class Engine:
         self._manual_dy = 0
         self._autocorr = None
         self._last_autocorr_t = 0.0
+        self._scan = None
+        self._scan_thread = None
 
         cfg = ProcessorConfig(
             samplerate=_DEMO_SAMPLERATE, height=_DEMO_TOTAL_H,
@@ -302,6 +305,69 @@ class Engine:
         self.reconfigure(height=height, refresh_rate=refresh)
         return {"height": height, "refresh_rate": refresh}
 
+    # -- frequency scan ----------------------------------------------------
+    def start_scan(self, start, stop, step, dwell=1.5):
+        """Sweep a frequency range and rank tunings by frame-rate confidence.
+
+        Reuses the running pipeline: it retunes the SDR to each frequency, lets
+        the frame detector dwell, then reads its confidence (the same measure
+        the CLI 'detect' uses).  Only meaningful for a live SDR source.
+        """
+        from .sources.base import IQSource  # noqa: F401 (documented dependency)
+        if self._source is None or not hasattr(self._source, "set_center_freq"):
+            raise RuntimeError("frequency scan needs a live SDR source")
+        if self._scan and self._scan.get("running"):
+            raise RuntimeError("a scan is already running")
+        start, stop, step = float(start), float(stop), float(step)
+        if step <= 0 or stop <= start:
+            raise ValueError("need stop > start and step > 0")
+        freqs = []
+        f = start
+        while f <= stop + 1e-6:
+            freqs.append(f)
+            f += step
+        self._scan = {"running": True, "done": 0, "total": len(freqs),
+                      "results": [], "dwell": float(dwell)}
+        self._scan_thread = threading.Thread(
+            target=self._scan_worker, args=(freqs, float(dwell)), daemon=True)
+        self._scan_thread.start()
+
+    def _scan_worker(self, freqs, dwell):
+        original = self.frequency
+        try:
+            for f in freqs:
+                if not self._scan or not self._scan["running"]:
+                    break
+                self.set_frequency(f)
+                with self.lock:
+                    self.processor.frame_detector = FrameRateDetector(
+                        self.processor.config.samplerate)
+                time.sleep(dwell)  # let the detector accumulate at this tuning
+                with self.lock:
+                    det = self.processor.frame_detector
+                    conf = det.peak_confidence()
+                    est = det.estimate_framerate()
+                self._scan["results"].append({
+                    "freq": f,
+                    "mhz": round(f / 1e6, 3),
+                    "confidence": round(conf, 2),
+                    "refresh": round(est.refresh_rate, 2) if est else None,
+                })
+                self._scan["results"].sort(key=lambda r: r["confidence"], reverse=True)
+                self._scan["done"] += 1
+        finally:
+            if original:
+                self.set_frequency(original)
+            if self._scan:
+                self._scan["running"] = False
+
+    def stop_scan(self):
+        if self._scan:
+            self._scan["running"] = False
+
+    def scan_status(self):
+        return self._scan or {"running": False, "done": 0, "total": 0, "results": []}
+
     def status(self):
         p = self.processor
         times = list(self._frame_times)
@@ -399,6 +465,25 @@ def create_app(engine: "Engine"):
         applied = engine.apply_detection()
         return jsonify({"applied": applied, "status": engine.status()})
 
+    @app.route("/api/scan", methods=["POST"])
+    def api_scan_start():
+        data = request.get_json(force=True) or {}
+        try:
+            engine.start_scan(data["start"], data["stop"], data["step"],
+                              dwell=float(data.get("dwell", 1.5)))
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 400
+        return jsonify(engine.scan_status())
+
+    @app.route("/api/scan")
+    def api_scan_status():
+        return jsonify(engine.scan_status())
+
+    @app.route("/api/scan/stop", methods=["POST"])
+    def api_scan_stop():
+        engine.stop_scan()
+        return jsonify(engine.scan_status())
+
     @app.route("/api/source", methods=["POST"])
     def api_source():
         data = request.get_json(force=True) or {}
@@ -444,7 +529,7 @@ def run(host="127.0.0.1", port=8000, debug=False):
 _HTML = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TempestSDR — control panel</title>
+<title>TempestSDR control panel</title>
 <style>
 :root{--bg:#0d1117;--panel:#161b22;--panel2:#1c2330;--line:#2d3644;--txt:#c9d4e3;
 --dim:#7d8ba0;--acc:#3fb950;--acc2:#58a6ff;--warn:#d29922;--bad:#f85149;}
@@ -518,7 +603,7 @@ canvas{width:100%;height:80px;display:block;background:var(--panel2);border-radi
       </div>
     </div>
     <div class="card" style="margin-top:12px">
-      <h2>Frame-rate autocorrelation — click a peak to set the refresh rate</h2>
+      <h2>Frame-rate autocorrelation, click a peak to set the refresh rate</h2>
       <div class="body">
         <canvas id="acc" width="900" height="80"></canvas>
         <div class="acc-info">
@@ -538,7 +623,7 @@ canvas{width:100%;height:80px;display:block;background:var(--panel2);border-radi
           <button data-k="file">IQ file</button>
           <button data-k="sdr">Live SDR</button>
         </div>
-        <div id="src-synthetic" class="hint">Built-in simulated emanation — no hardware needed.</div>
+        <div id="src-synthetic" class="hint">Built-in simulated emanation, no hardware needed.</div>
         <div id="src-file" style="display:none;flex-direction:column;gap:7px">
           <label><span class="k">path</span><input id="f-path" type="text" style="width:180px" placeholder="/path/capture.iq"></label>
           <label><span class="k">sample rate</span><input id="f-sr" type="number" value="8000000"></label>
@@ -550,7 +635,7 @@ canvas{width:100%;height:80px;display:block;background:var(--panel2);border-radi
         <div id="src-sdr" style="display:none;flex-direction:column;gap:7px">
           <label><span class="k">driver</span>
             <select id="s-drv" style="width:170px">
-              <option value="rtlsdr-native">RTL-SDR (pyrtlsdr — recommended)</option>
+              <option value="rtlsdr-native">RTL-SDR (pyrtlsdr, recommended)</option>
               <option value="rtlsdr">RTL-SDR (SoapySDR)</option>
               <option value="hackrf">HackRF (SoapySDR)</option>
               <option value="uhd">USRP / UHD (SoapySDR)</option></select></label>
@@ -567,7 +652,7 @@ canvas{width:100%;height:80px;display:block;background:var(--panel2);border-radi
     <div class="card">
       <h2>Video mode</h2>
       <div class="body">
-        <select id="mode-sel"><option value="">— preset —</option></select>
+        <select id="mode-sel"><option value="">preset...</option></select>
         <label><span class="k">total height (lines)</span><input id="m-h" type="number"></label>
         <label><span class="k">refresh rate (Hz)</span><input id="m-r" type="number" step="0.001"></label>
         <div class="row">
@@ -575,6 +660,27 @@ canvas{width:100%;height:80px;display:block;background:var(--panel2);border-radi
           <button class="primary" id="detect" title="estimate refresh & resolution from the signal">Auto-detect (blind)</button>
         </div>
         <div class="hint" id="detect-out"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Frequency scan (live SDR)</h2>
+      <div class="body">
+        <div class="row">
+          <label style="flex:1"><span class="k">start MHz</span><input id="sc-start" type="number" value="250" style="width:72px"></label>
+          <label style="flex:1"><span class="k">stop MHz</span><input id="sc-stop" type="number" value="600" style="width:72px"></label>
+        </div>
+        <div class="row">
+          <label style="flex:1"><span class="k">step MHz</span><input id="sc-step" type="number" value="10" style="width:72px"></label>
+          <label style="flex:1"><span class="k">dwell s</span><input id="sc-dwell" type="number" value="1.5" step="0.5" style="width:72px"></label>
+        </div>
+        <div class="row">
+          <button class="primary" id="sc-run">Scan</button>
+          <button id="sc-stop-btn">Stop</button>
+          <span class="hint" id="sc-prog"></span>
+        </div>
+        <div id="sc-results" style="display:flex;flex-direction:column;gap:3px"></div>
+        <div class="err" id="sc-err"></div>
       </div>
     </div>
 
@@ -629,8 +735,31 @@ $('src-apply').onclick=async()=>{
   if(k==='file') body={kind:k,path:$('f-path').value,samplerate:+$('f-sr').value,format:$('f-fmt').value};
   if(k==='sdr') body={kind:k,driver:$('s-drv').value,samplerate:+$('s-sr').value,frequency:+$('s-fq').value,gain:$('s-gn').value};
   const r=await jpost('/api/source',body);
-  $('src-err').textContent = r.error? ('⚠ '+r.error):'';
+  $('src-err').textContent = r.error? ('error: '+r.error):'';
 };
+
+// frequency scan
+$('sc-run').onclick=async()=>{
+  $('sc-err').textContent='';
+  const r=await jpost('/api/scan',{start:+$('sc-start').value*1e6,stop:+$('sc-stop').value*1e6,
+    step:+$('sc-step').value*1e6,dwell:+$('sc-dwell').value});
+  if(r&&r.error){$('sc-err').textContent='error: '+r.error;return;}
+  pollScan();
+};
+$('sc-stop-btn').onclick=()=>jpost('/api/scan/stop',{});
+async function pollScan(){let s;try{s=await fetch('/api/scan').then(r=>r.json());}catch(e){return;}
+  $('sc-prog').textContent=s.total?(s.done+'/'+s.total+(s.running?' scanning':' done')):'';
+  const box=$('sc-results');box.innerHTML='';
+  (s.results||[]).slice(0,8).forEach(row=>{
+    const el=document.createElement('button');el.style.textAlign='left';el.style.fontSize='11px';
+    el.textContent=row.mhz+' MHz   '+(row.refresh==null?'?':row.refresh+' Hz')+'   conf '+row.confidence;
+    el.onclick=async()=>{$('s-fq').value=Math.round(row.freq);
+      await jpost('/api/source',{kind:'sdr',driver:$('s-drv').value,samplerate:+$('s-sr').value,
+        frequency:row.freq,gain:$('s-gn').value});};
+    box.appendChild(el);
+  });
+  if(s.running)setTimeout(pollScan,700);
+}
 
 // video mode
 fetch('/api/modes').then(r=>r.json()).then(ms=>{modes=ms;
