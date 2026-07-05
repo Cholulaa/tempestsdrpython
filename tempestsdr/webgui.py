@@ -456,7 +456,7 @@ header .tag{color:var(--dim);font-size:12px}
 .wrap{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;padding:14px;align-items:start}
 @media(max-width:900px){.wrap{grid-template-columns:1fr}}
 .view{background:#000;border:1px solid var(--line);border-radius:8px;overflow:hidden;position:relative}
-.view img{width:100%;display:block;image-rendering:pixelated;background:#000;min-height:200px}
+.view img{width:100%;display:block;background:#000;min-height:200px}
 .badges{position:absolute;top:8px;left:8px;display:flex;gap:6px;flex-wrap:wrap}
 .badge{background:rgba(13,17,23,.82);border:1px solid var(--line);border-radius:5px;
 padding:3px 8px;font-size:11px;color:var(--dim)}
