@@ -7,7 +7,7 @@ name = "tempestsdr"
 version = "1.0.0"
 description = "Reconstruct video-display content from electromagnetic emanations captured with an SDR (Python port of TempestSDR)."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.7"
 license = { text = "GPL-3.0-or-later" }
 authors = [{ name = "Python port contributors" }]
 keywords = ["sdr", "tempest", "van-eck", "side-channel", "security-research", "dsp"]
@@ -18,9 +18,10 @@ classifiers = [
     "Topic :: Scientific/Engineering",
     "Intended Audience :: Science/Research",
 ]
+# numpy is the only hard dependency; the FFT and convolutions use numpy alone,
+# which keeps installs light on low-power boards such as a Raspberry Pi.
 dependencies = [
-    "numpy>=1.21",
-    "scipy>=1.7",
+    "numpy>=1.19",
 ]
 
 [project.optional-dependencies]

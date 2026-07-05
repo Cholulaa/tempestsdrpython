@@ -1,9 +1,9 @@
-# Core runtime dependencies
-numpy>=1.21
-scipy>=1.7
+# Core runtime dependency (the only hard requirement)
+numpy>=1.19
 
 # Optional (install as needed):
 #   pillow      -> image loading / PNG output / GIF export   (pip install pillow)
-#   matplotlib  -> real-time GUI viewer                      (pip install matplotlib)
-#   pyrtlsdr    -> live RTL-SDR capture                      (pip install pyrtlsdr)
-#   SoapySDR    -> live capture for many other front-ends    (system package)
+#   flask       -> web control panel and fleet control server (pip install flask)
+#   matplotlib  -> lightweight matplotlib live viewer         (pip install matplotlib)
+#   pyrtlsdr    -> live RTL-SDR capture                       (pip install "pyrtlsdr<0.3")
+#   SoapySDR    -> live capture for many other front-ends     (system package)

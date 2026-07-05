@@ -65,6 +65,36 @@ journalctl -u tempestsdr-agent -f           # watch it check in
 The probe keeps reconstructing and buffering through network outages and
 reconnects with backoff; `systemd` restarts it if it ever dies.
 
+### Raspberry Pi models
+
+The probe is deliberately light. On the edge it needs only `numpy`, `pillow` and
+a radio driver (`pyrtlsdr` for RTL-SDR); `scipy` is not required at all, and
+Flask is only used by the control server, never by the probe.
+
+Raspberry Pi 4 or Pi 3 (quad-core, 1 GB or more of RAM) reconstruct in real time
+at RTL-SDR rates:
+
+```bash
+sudo apt install python3-numpy python3-pil
+pip install "pyrtlsdr<0.3"
+pip install .
+```
+
+Raspberry Pi 1 or Pi Zero (single-core ARMv6, little RAM) work too, at a lower
+frame rate. A few tips:
+
+- Install `numpy` from piwheels (the default index on Raspberry Pi OS) so it
+  resolves a prebuilt wheel instead of compiling from source.
+- Use a lower sample rate (for example `SAMPLERATE=1200000` or `900000` in
+  `agent.env`). Horizontal resolution drops but the board keeps up.
+- Raise the report interval (`INTERVAL=5`) and lower `QUALITY=60` to cut the
+  upload and JPEG work.
+- If the board still cannot keep pace, the SDR just drops samples and the frame
+  rate falls; memory never grows unbounded.
+
+The whole toolkit targets Python 3.7 and later, which covers the Python shipped
+on older Raspberry Pi OS releases.
+
 ### RTL-SDR bandwidth reality
 
 An RTL-SDR reliably streams **~2.4 Msps**. The reconstructable horizontal pixel
